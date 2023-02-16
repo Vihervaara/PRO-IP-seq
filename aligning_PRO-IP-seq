@@ -1,0 +1,227 @@
+
+
+
+###### Parameters ####
+############################################################
+
+UMI_LEN=7  # Length of UMI in basepairs ### we have 6nt +C
+
+## UMI Flags (set to Y or N as appropriate). Currently not automated here, but tells where to find them in existing PRO-IP-seq data.
+FIVEP_UMI="Y" # Is there a UMI on the 5' end of the read?
+THREEP_UMI="N" # Is there a UMI on the 3' end of the read?
+
+## Adaptor sequences to clip. Default = Tru-Seq small RNA
+ADAPTOR_1="TGGAATTCTCGGGTGCCAAGGAACTCCAGTCAC"
+ADAPTOR_2="GATCGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATT"
+
+## Genomes. Fill the paths.
+GENOME_EXP="/Users/viherann/GROseq_Utils/refGenomes/hg19/genome_hg19_bt2/hg19"
+GENOME_SPIKE="/Users/viherann/GROseq_Utils/refGenomes/mm10/genome_mm10_bowtie2/mm10assembly" 
+RDNA="/Users/viherann/GROseq_utils/refGenomes/hg19/rRNA_hg19" # ribosomal genes. Not needed with PRO-IP-seq using Pol II abs, practically no rRNA reads. 
+
+#in-lines barcodes. These files list the samples and which barcodes they have.
+barcodes_NHS="Barcodes_NHS.txt"
+barcodes_HS30="Barcodes_HS30.txt"
+
+#=============================================================================================
+
+mkdir -p logs
+mkdir -p logs/fastqc
+mkdir -p logs/fastp
+mkdir -p duplicatesRemoved
+
+
+#=============================================================================================
+#### This first part takes the 3' indexed pools of samples and splits them into their own files.
+# shown here for the NHS samples.
+
+  gunzip ${pathUnsplitted}i4_NHS_R1.fastq.gz
+  gunzip ${pathUnsplitted}i4_NHS_R2.fastqq.gz
+  
+  cat ${pathUnsplitted}i4_NHS_R1.fastq | ${barcode_splitter} --bcfile ${barcodes_NHS} --bol --mismatches 2 --partial 2 --prefix i4_ --suffix "_BR1_R1.fastq"
+
+  gzip ${pathUnsplitted}i4_NHS_R1.fastq
+
+
+#=============================================================================================
+### pairing the R1 and R2 for each NHS sample. R1 has been split. Here we query the pool of R2, matching them to R1 samples (split based on the barcode).
+
+List_file1="
+i4_NHS_CTD_BR1
+i4_NHS_S2_BR1
+i4_NHS_S5_BR1
+i4_NHS_S7_BR1
+i4_NHS_input_BR1
+"
+
+for x in ${List_file1}
+
+do
+
+   fastq_pair -p -t 50000000 ${x}_R1.fastq i4_NHS_R2.fastq
+   #pairing the reads after trimming. -t reflects the siz of the library, we had rougly 50 M read pairs
+
+  mv i4_NHS_R2.fastq.paired.fq ${x}_R2_pa.fastq   ### renaming the file, the next round would write over this.
+  mv ${x}.fastq.paired.fq ${x}_R1_pa.fastq     ### renaming the file for simplicity, matches the name for R2.
+  rm *single*
+
+done
+
+   gzip i4_NHS_R2.fastq
+
+
+#=============================================================================================
+### pairing the R1 and R2 for each HS30 sample
+  gunzip ${pathUnsplitted}i4_HS30_R2.fastq.gz
+
+List_file2="
+i4_HS30_CTD_BR1
+i4_HS30_S2_BR1
+i4_HS30_S5_BR1
+i4_HS30_S7_BR1
+i4_HS30_input_BR1
+"
+
+for x in ${List_file2}
+
+do
+
+    fastq_pair -p -t 500000000 ${x}.fastq i4_HS30_R2.fastq
+    #   pairing the reads after trimming. -t reflects the siz of the library, we had rougly 50 M read pairs
+
+    mv i4_HS30_R2.fastq.paired.fq ${x}_R2_pa.fastq   ### renaming the file, the next round would write over this.
+    mv ${x}_R1.fastq.paired.fq ${x}_R1_pa.fastq     ### renaming the file for simplicity, matches the name for R2.
+    rm *single*
+
+done
+
+   gzip i4_HS30_R2.fastq
+
+
+#=============================================================================================
+# Mapping the reads
+
+List="
+i4_NHS_CTD_BR1
+i4_NHS_S2_BR1
+i4_NHS_S5_BR1
+i4_NHS_S7_BR1
+i4_NHS_input_BR1
+i4_HS30_CTD_BR1
+i4_HS30_S2_BR1
+i4_HS30_S5_BR1
+i4_HS30_S7_BR1
+i4_HS30_input_BR1
+"
+
+
+for x in ${List}
+
+do
+
+  ### analysing the read quality. Please note that also the inline barcode and the presence of UMI (constant C) can be checked.
+  
+    fastqc ${x}_R1_pa.fastq -o logs/fastqc
+    fastqc ${x}_R2_pa.fastq -o logs/fastqc
+ 
+ 
+    fastp -i ${x}_R1.fastq -I ./He1_a/He1_a_R2.fq --out1 ${x}_R1_fp.fastq --out2 ${x}_R2_fp.fastq --adapter_sequence $ADAPTOR_1 --adapter_sequence_r2 $ADAPTOR_2 --umi --umi_loc=read2 --umi_len=${UMI_LEN} --html logs/fastp/${x}_fastp_log.html -w 10 --overlap_len_require 15 2> logs/fastp/${x}_fastp.log
+    
+    mv fastp.json ./logs/fastp/${x}_fastp.json
+    fastqc ${x}_pair.fastq -o logs/fastqc
+
+  
+  ### removing the 3prime barcode.
+  fastx_trimmer -f 8 -v -i ${x}_R1_fp.fastq -o ${x}_R1_trimmed.fastq -Q33  ### removes the 3prime barcode from Read 1.
+ # The first nt to keep from the Read 1 is 8th (removes the 7 nt barcode).
+
+  fastx_trimmer -t 7 -v -i ${x}_R2_fp.fastq -o ${x}_R2_trimmed.fastq -Q33  ### removes the 3prime barcode from Read 2.
+ # Trims 7 nt from the end of Read 2. This removes the 7 nt barcode.
+ 
+   
+   ### reverse complements 
+   echo making reverse complement of the clipped sequences of ${x}:
+ 
+   fastx_reverse_complement -i ${x}_R1_trimmed.fastq -o ${x}_R1_q.fastq -Q33
+  
+
+
+    #########===============  e2e MAPPING TO hg19  ===========================================================
+    
+   ### Mapping to hg19 requiring e2e mapping of reads
+    echo e2e aligning ${x} to hg19 with bowtie2:
+   bowtie2 -p7 -q --end-to-end --ff -x ${genomehg19} --un-conc ${x}_hgRemovedTemp.fastq -1 ${x}_R1_q.fastq -2 ${x}_R2_trimmed.fastq | awk '$2 != 4 {print}' | sed '/XS:/d' | samtools view -S -b '-' > ${x}_pair.bam
+    
+  
+    #########===============  e2e MAPPING TO mm10 spikeIn genome  ===========================================================
+    # Generating uniquely mapping reads to mm10. Aligning reeads that did not match to hg19 to avoid human sequences to match to spike-in.
+    bowtie2 -p7 -q --end-to-end --ff -x ${genomemm10} --un-conc ${x}_hgmmRemovedTemp.fastq -1 ${x}_hgRemovedTemp.1.fastq -2 ${x}_hgRemovedTemp.2.fastq | awk '$2 != 4 {print}' | sed '/XS:/d' | samtools view -S -b '-' > ${x}_uSpkInmm10.bam
+
+
+    rm *Temp*
+
+
+    #########===============  Collapsing based on genomic positions of the reads  ===================
+
+    umi_tools dedup --stdin ${x}_pair.bam --stdout ${x}_pair_deduped.bam --log ${x}_pair_umiTools_Log.log --umi-separator=":"
+
+    umi_tools dedup --stdin ${x}_uSpkInmm10.bam --stdout ${x}_uSpkInmm10_deduped.bam --log ${x}_uSpkInmm10_umiTools_Log.log --umi-separator=":"
+  
+  
+  
+    #########============================  Bam and Bed files  ======================================
+  
+    samtools sort ${x}_pair_deduped.bam -o ${x}_pair_deduped_sorted.bam
+    
+    samtools index ${x}_pair_deduped_sorted.bam
+    ## these set of commands create sorted and indexed bam file to be used in IGV.
+    
+    echo converting bam to bed file and sorting it:
+    bamToBed -i ${x}_pair_deduped_sorted.bam | sort -k1,1 -k2,2n > ${x}_pair_sorted.bed
+
+    echo converting spikeIn bam to bed file and sorting it:
+    bamToBed -i ${x}_uSpkInmm10_deduped.bam | sort -k1,1 -k2,2n > ${x}_uSpkInmm10.bed
+
+
+     #########=============== generating files for browsing etc.  ===========================================================
+  
+    echo generating non-normalized bedgraph files of ${x}:
+    awk '$6 == "+"' ${x}_pair_sorted.bed | genomeCoverageBed -i stdin -3 -bg -g ${chromSizeshg19} > ${x}_pl.bedgraph
+    awk '$6 == "-"' ${x}_pair_sorted.bed | genomeCoverageBed -i stdin -3 -bg -g ${chromSizeshg19} > ${x}_m.bedgraph
+    awk '{$4=$4*-1; print}' ${x}_m.bedgraph > ${x}_mn.bedgraph
+
+    echo making bigwig from un-normalized bedgraph files of ${x}:
+    ${bgTObigWig} ${x}_pl.bedgraph ${chromSizeshg19} ${x}_pl.bigWig
+    ${bgTObigWig} ${x}_mn.bedgraph ${chromSizeshg19} ${x}_mn.bigWig
+  
+    echo making binary files from RPMnormalized bedgraph files of ${x}:
+    ${bgTObi} -i ${x}_pl.bedgraph -o ${x}_pl.bi -c ${chromInfohg19}
+    ${bgTObi} -i ${x}_mn.bedgraph -o ${x}_mn.bi -c ${chromInfohg19}
+    ## generates binary file from normalized bedgraph files
+  
+  
+    c=$(grep -c ^ ${x}_pair_sorted.bed)
+
+    echo total count from sorted.bed file of ${x} is:
+    echo $c
+
+    echo $c | awk '{ c="'$c'"; printf "%s\t%s\t%s\t%s\n", $1, $2, $3, ($4*1000000)/c}' ${x}_pl.bedgraph  > ${x}_RPMnorm_pl.bedgraph
+    echo $c | awk '{ c="'$c'"; printf "%s\t%s\t%s\t%s\n", $1, $2, $3, ($4*1000000)/c}' ${x}_mn.bedgraph  > ${x}_RPMnorm_mn.bedgraph
+    ## generates sequnecing depth (RPM) normalized bedgraph files by dividing the fourth column of bedgraph file with total number of mapped reads and multiplying the resulting number with 1M (RPM - Reads Per Million)
+
+    echo making bigwig from RPM normalized bedgraph files of ${x}:
+    ${bgTObigWig} ${x}_RPMnorm_pl.bedgraph ${chromSizeshg19} ${x}_RPMnorm_pl.bigWig
+    ${bgTObigWig} ${x}_RPMnorm_mn.bedgraph ${chromSizeshg19} ${x}_RPMnorm_mn.bigWig
+
+
+    echo making binary files from RPM normalized bedgraph files of ${x}:
+    ${bgTObi} -i ${x}_RPMnorm_pl.bedgraph -o ${x}_RPMnorm_pl.bi -c ${chromInfohg19}
+    ${bgTObi} -i ${x}_RPMnorm_mn.bedgraph -o ${x}_RPMnorm_mn.bi -c ${chromInfohg19}
+
+
+#############################
+
+    
+    
+  done
+    
