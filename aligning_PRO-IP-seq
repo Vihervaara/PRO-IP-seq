@@ -14,7 +14,7 @@ ADAPTOR_2="GATCGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATT"
 genome_hg19="/PATH/genome_hg19_bt2/hg19"
 genome_mm10="/PATH/genome_mm10_bt2/mm10" 
 
-#in-lines barcodes. These files list the samples and which barcodes they have.
+#in-lines barcodes. Generate text files that list the samples and which barcodes they have.
 barcodes_NHS="Barcodes_NHS.txt"
 barcodes_HS30="Barcodes_HS30.txt"
 
