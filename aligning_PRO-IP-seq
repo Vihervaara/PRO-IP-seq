@@ -6,7 +6,7 @@
 
 UMI_LEN=7  # Length of UMI in basepairs ### we have 6nt +C
 
-## Adaptor sequences to clip. Default = Tru-Seq small RNA
+## Adaptor sequences to clip.
 ADAPTOR_1="TGGAATTCTCGGGTGCCAAGGAACTCCAGTCAC"
 ADAPTOR_2="GATCGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATT"
 
