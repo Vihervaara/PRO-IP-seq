@@ -6,18 +6,13 @@
 
 UMI_LEN=7  # Length of UMI in basepairs ### we have 6nt +C
 
-## UMI Flags (set to Y or N as appropriate). Currently not automated here, but tells where to find them in existing PRO-IP-seq data.
-FIVEP_UMI="Y" # Is there a UMI on the 5' end of the read?
-THREEP_UMI="N" # Is there a UMI on the 3' end of the read?
-
 ## Adaptor sequences to clip. Default = Tru-Seq small RNA
 ADAPTOR_1="TGGAATTCTCGGGTGCCAAGGAACTCCAGTCAC"
 ADAPTOR_2="GATCGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATT"
 
 ## Genomes. Fill the paths.
-GENOME_EXP="/Users/viherann/GROseq_Utils/refGenomes/hg19/genome_hg19_bt2/hg19"
-GENOME_SPIKE="/Users/viherann/GROseq_Utils/refGenomes/mm10/genome_mm10_bowtie2/mm10assembly" 
-RDNA="/Users/viherann/GROseq_utils/refGenomes/hg19/rRNA_hg19" # ribosomal genes. Not needed with PRO-IP-seq using Pol II abs, practically no rRNA reads. 
+genome_hg19="/PATH/genome_hg19_bt2/hg19"
+genome_mm10="/PATH/genome_mm10_bt2/mm10" 
 
 #in-lines barcodes. These files list the samples and which barcodes they have.
 barcodes_NHS="Barcodes_NHS.txt"
@@ -35,39 +30,39 @@ mkdir -p duplicatesRemoved
 #### This first part takes the 3' indexed pools of samples and splits them into their own files.
 # shown here for the NHS samples.
 
-  gunzip ${pathUnsplitted}i4_NHS_R1.fastq.gz
-  gunzip ${pathUnsplitted}i4_NHS_R2.fastqq.gz
+  gunzip NHS_R1.fastq.gz
+  gunzip NHS_R2.fastq.gz
   
-  cat ${pathUnsplitted}i4_NHS_R1.fastq | ${barcode_splitter} --bcfile ${barcodes_NHS} --bol --mismatches 2 --partial 2 --prefix i4_ --suffix "_BR1_R1.fastq"
+  cat NHS_R1.fastq | ${barcode_splitter} --bcfile ${barcodes_NHS} --bol --mismatches 2 --partial 2 --suffix "_BR1_R1.fastq"
 
-  gzip ${pathUnsplitted}i4_NHS_R1.fastq
+  gzip NHS_R1.fastq
 
 
 #=============================================================================================
 ### pairing the R1 and R2 for each NHS sample. R1 has been split. Here we query the pool of R2, matching them to R1 samples (split based on the barcode).
 
 List_file1="
-i4_NHS_CTD_BR1
-i4_NHS_S2_BR1
-i4_NHS_S5_BR1
-i4_NHS_S7_BR1
-i4_NHS_input_BR1
+NHS_CTD_BR1
+NHS_S2_BR1
+NHS_S5_BR1
+NHS_S7_BR1
+NHS_input_BR1
 "
 
 for x in ${List_file1}
 
 do
 
-   fastq_pair -p -t 50000000 ${x}_R1.fastq i4_NHS_R2.fastq
+   fastq_pair -p -t 50000000 ${x}_R1.fastq NHS_R2.fastq
    #pairing the reads after trimming. -t reflects the siz of the library, we had rougly 50 M read pairs
 
-  mv i4_NHS_R2.fastq.paired.fq ${x}_R2_pa.fastq   ### renaming the file, the next round would write over this.
+  mv NHS_R2.fastq.paired.fq ${x}_R2_pa.fastq   ### renaming the file, the next round would write over this.
   mv ${x}.fastq.paired.fq ${x}_R1_pa.fastq     ### renaming the file for simplicity, matches the name for R2.
   rm *single*
 
 done
 
-   gzip i4_NHS_R2.fastq
+   gzip NHS_R2.fastq
 
 
 #=============================================================================================
@@ -75,43 +70,45 @@ done
   gunzip ${pathUnsplitted}i4_HS30_R2.fastq.gz
 
 List_file2="
-i4_HS30_CTD_BR1
-i4_HS30_S2_BR1
-i4_HS30_S5_BR1
-i4_HS30_S7_BR1
-i4_HS30_input_BR1
+HS30_CTD_BR1
+HS30_S2_BR1
+HS30_S5_BR1
+HS30_S7_BR1
+HS30_input_BR1
 "
 
 for x in ${List_file2}
 
 do
 
-    fastq_pair -p -t 500000000 ${x}.fastq i4_HS30_R2.fastq
+    fastq_pair -p -t 500000000 ${x}.fastq HS30_R2.fastq
     #   pairing the reads after trimming. -t reflects the siz of the library, we had rougly 50 M read pairs
 
-    mv i4_HS30_R2.fastq.paired.fq ${x}_R2_pa.fastq   ### renaming the file, the next round would write over this.
+    mv HS30_R2.fastq.paired.fq ${x}_R2_pa.fastq   ### renaming the file, the next round would write over this.
     mv ${x}_R1.fastq.paired.fq ${x}_R1_pa.fastq     ### renaming the file for simplicity, matches the name for R2.
     rm *single*
 
 done
 
-   gzip i4_HS30_R2.fastq
+   gzip HS30_R2.fastq
 
 
 #=============================================================================================
 # Mapping the reads
 
 List="
-i4_NHS_CTD_BR1
-i4_NHS_S2_BR1
-i4_NHS_S5_BR1
-i4_NHS_S7_BR1
-i4_NHS_input_BR1
-i4_HS30_CTD_BR1
-i4_HS30_S2_BR1
-i4_HS30_S5_BR1
-i4_HS30_S7_BR1
-i4_HS30_input_BR1
+NHS_CTD_BR1
+NHS_S2_BR1
+NHS_S5_BR1
+NHS_S7_BR1
+NHS_IgG_BR1
+NHS_input_BR1
+HS30_CTD_BR1
+HS30_S2_BR1
+HS30_S5_BR1
+HS30_S7_BR1
+HS30_IgG_BR1
+HS30_input_BR1
 "
 
 
@@ -125,7 +122,7 @@ do
     fastqc ${x}_R2_pa.fastq -o logs/fastqc
  
  
-    fastp -i ${x}_R1.fastq -I ./He1_a/He1_a_R2.fq --out1 ${x}_R1_fp.fastq --out2 ${x}_R2_fp.fastq --adapter_sequence $ADAPTOR_1 --adapter_sequence_r2 $ADAPTOR_2 --umi --umi_loc=read2 --umi_len=${UMI_LEN} --html logs/fastp/${x}_fastp_log.html -w 10 --overlap_len_require 15 2> logs/fastp/${x}_fastp.log
+    fastp -i ${x}_R1_pa.fastq -I ${x}_R2_pa.fastq --out1 ${x}_R1_fp.fastq --out2 ${x}_R2_fp.fastq --adapter_sequence $ADAPTOR_1 --adapter_sequence_r2 $ADAPTOR_2 --umi --umi_loc=read2 --umi_len=${UMI_LEN} --html logs/fastp/${x}_fastp_log.html -w 10 --overlap_len_require 15 2> logs/fastp/${x}_fastp.log
     
     mv fastp.json ./logs/fastp/${x}_fastp.json
     fastqc ${x}_pair.fastq -o logs/fastqc
@@ -133,10 +130,10 @@ do
   
   ### removing the 3prime barcode.
   fastx_trimmer -f 8 -v -i ${x}_R1_fp.fastq -o ${x}_R1_trimmed.fastq -Q33  ### removes the 3prime barcode from Read 1.
- # The first nt to keep from the Read 1 is 8th (removes the 7 nt barcode).
+  # The first nt to keep from the Read 1 is 8th (removes the 7 nt barcode).
 
   fastx_trimmer -t 7 -v -i ${x}_R2_fp.fastq -o ${x}_R2_trimmed.fastq -Q33  ### removes the 3prime barcode from Read 2.
- # Trims 7 nt from the end of Read 2. This removes the 7 nt barcode.
+  # Trims 7 nt from the end of Read 2. This removes the 7 nt barcode.
  
    
    ### reverse complements 
