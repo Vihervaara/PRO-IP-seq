@@ -102,10 +102,10 @@ done
 #=============================================================================================
 ### pairing the R1 and R2 for each HS30 sample
 
-  gunzip HS30_R1.fastq.gz ### Pool of samples, Read 1
-  gunzip HS30_R2.fastq.gz ### Pool of samples, Read 2
+  gunzip HS30_R1.fastq.gz ### Pool of HS30 samples, Read 1
+  gunzip HS30_R2.fastq.gz ### Pool of HS30 samples, Read 2
   
-  cat NHS_R1.fastq | ${barcode_splitter} --bcfile ${barcodes_HS30} --bol --mismatches 2 --partial 2 --suffix "_BR1_R1.fastq"
+  cat HS30_R1.fastq | ${barcode_splitter} --bcfile ${barcodes_HS30} --bol --mismatches 2 --partial 2 --suffix "_BR1_R1.fastq"
 
   gzip HS30_R1.fastq
 
@@ -128,8 +128,8 @@ do
     fastq_pair -p -t 500000000 ${x}.fastq HS30_R2.fastq
     #   pairing the reads after trimming. -t reflects the siz of the library, we had rougly 50 M read pairs
 
-    mv HS30_R2.fastq.paired.fq ${x}_R2_pa.fastq   ### renaming the file, the next round would write over this.
-    mv ${x}_R1.fastq.paired.fq ${x}_R1_pa.fastq     ### renaming the file for simplicity, matches the name for R2.
+    mv HS30_R2.fastq.paired.fq ${x}_R2_pa.fastq     
+    mv ${x}_R1.fastq.paired.fq ${x}_R1_pa.fastq     
     rm *single*
 
 done
@@ -160,7 +160,7 @@ for x in ${List}
 
 do
 
-  ### analysing the read quality. Please note that also the inline barcode and the presence of UMI (constant C) can be checked.
+  ### analysing the read quality. Please note that also the in-line barcode and the presence of UMI (constant C at position 7) can be checked.
   
     fastqc ${x}_R1_pa.fastq -o logs/fastqc
     fastqc ${x}_R2_pa.fastq -o logs/fastqc
@@ -189,8 +189,8 @@ do
 
     #########===============  e2e MAPPING TO hg19  ===========================================================
     
-   ### Mapping to hg19 requiring e2e mapping of reads
-    echo e2e aligning ${x} to hg19 with bowtie2:
+   ### Mapping to hg19 requiring e2e mapping 
+   echo e2e aligning ${x} to hg19 with bowtie2:
    bowtie2 -p7 -q --end-to-end --ff -x ${genome_hg19} --un-conc ${x}_hgRemovedTemp.fastq -1 ${x}_R1_q.fastq -2 ${x}_R2_trimmed.fastq | awk '$2 != 4 {print}' | sed '/XS:/d' | samtools view -S -b '-' > ${x}_pair.bam
     
   
@@ -202,7 +202,7 @@ do
     rm *Temp*
 
 
-    #########===============  Collapsing based on genomic positions of the reads  ===================
+    #########===============  Collapsing based on genomic positions and UMIs  ===================
 
     umi_tools dedup --stdin ${x}_pair.bam --stdout ${x}_pair_deduped.bam --log ${x}_pair_umiTools_Log.log --umi-separator=":"
 
