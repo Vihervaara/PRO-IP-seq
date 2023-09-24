@@ -7,7 +7,7 @@ Provides updated pipeline(s) for analysing PRO-IP-seq data.
 
 
 For description of PRO-IP-seq protocol and analyses, please see the original article:
-Vihervaara A, Versluis P, Lis J. (2023). PRO-IP-seq Tracks Molecular Modifications of Engaged Pol II Complexes at Nucleotide Resolution. PMID:36778434.
+Vihervaara A, Versluis P, Himanen SV, Lis J. (2023). PRO-IP-seq Tracks Molecular Modifications of Engaged Pol II Complexes at Nucleotide Resolution. PMID:36778434.
 https://pubmed.ncbi.nlm.nih.gov/36778434/
 
 
