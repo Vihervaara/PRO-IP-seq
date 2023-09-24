@@ -1,20 +1,53 @@
+##############################
+#                            #
+#   PRO-IP-seq pipeline      #
+#                            #
+#       March 2023           #
+#      viher@kth.se          #
+#                            #
+##############################
+
+###############################################################################################################################################
+# Separates reads from pooled samples using in-line barcode in R1. [barcode_splitter: https://gist.github.com/dgrtwo/3725741]
+# Pairs R1-reads with their corresponding R2 [fastq_pair: https://github.com/linsalrob/fastq-pair]
+# Generates fastqc files for visualising reads and their quality measures [fastqc: https://www.bioinformatics.babraham.ac.uk/projects/fastqc/]
+# Trims the adapter sequences and lifts the UMI to the read title [fastp: https://github.com/OpenGene/fastp]
+# Removes the barcodes and reverse complements R1. [fastx_toolkit: http://hannonlab.cshl.edu/fastx_toolkit/]
+# Maps the reads, end-to-end to the human genome (sample genome). [bowtie2: https://github.com/BenLangmead/bowtie2]
+# Maps reads that did not align to human genome to the mouse genome (spike-in genome). [bowtie2: https://github.com/BenLangmead/bowtie2]
+# Collapses multimappers. [umi_tools: https://github.com/CGATOxford/UMI-tools]
+# Sorts the reads. [samtools: https://github.com/samtools/samtools]
+# Generates .bed and .bedgraph files [bedtools: https://bedtools.readthedocs.io/en/latest/]
+# Generated .bigWig files. [bedGraphToBigWig: https://www.encodeproject.org/software/bedgraphtobigwig/]
+###############################################################################################################################################
+
+#######
+# For description of PRO-IP-seq protocol and analyses, please see the original article:
+# Vihervaara A, Versluis P, Lis J. (2023). PRO-IP-seq Tracks Molecular Modifications of Engaged Pol II Complexes at Nucleotide Resolution. PMID:36778434.
+# https://pubmed.ncbi.nlm.nih.gov/36778434/
+
+#######
+# For description of run-on-seq analyses and downstream processing, including identification of functional genomic regions, please see:
+# Rabenius A, Chandrakumaran S, Sistonen L, Vihervaara A. (2022). Quantifying RNA synthesis at rate-limiting steps of transcription using nascent RNA-sequencing data. STAR Protoc. PMID: 35036951 
+# https://www.sciencedirect.com/science/article/pii/S2666166721007425/pdf
 
 
 
 ###### Parameters ####
 ############################################################
 
-UMI_LEN=7  # Length of UMI in basepairs ### we have 6nt +C
+UMI_LEN=7  # Length of UMI in basepairs ### we have 6nt +C (Decription of PRO-IP-seq, Vihervaara et al., 2023)
 
 ## Adaptor sequences to clip.
 ADAPTOR_1="TGGAATTCTCGGGTGCCAAGGAACTCCAGTCAC"
 ADAPTOR_2="GATCGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATT"
 
-## Genomes. Fill the paths.
+## Update the paths to genome files as bt2:
 genome_hg19="/PATH/genome_hg19_bt2/hg19"
 genome_mm10="/PATH/genome_mm10_bt2/mm10" 
 
-#in-lines barcodes. Generate text files that list the samples and which barcodes they have.
+#in-lines barcodes. Generate text files that list the samples and which barcodes 
+# Described in [barcode_splitter: https://gist.github.com/dgrtwo/3725741].
 barcodes_NHS="Barcodes_NHS.txt"
 barcodes_HS30="Barcodes_HS30.txt"
 
@@ -30,8 +63,8 @@ mkdir -p duplicatesRemoved
 #### This first part takes the 3' indexed pools of samples and splits them into their own files.
 # shown here for the NHS samples.
 
-  gunzip NHS_R1.fastq.gz
-  gunzip NHS_R2.fastq.gz
+  gunzip NHS_R1.fastq.gz ### Pool of samples, Read 1
+  gunzip NHS_R2.fastq.gz ### Pool of samples, Read 2
   
   cat NHS_R1.fastq | ${barcode_splitter} --bcfile ${barcodes_NHS} --bol --mismatches 2 --partial 2 --suffix "_BR1_R1.fastq"
 
@@ -39,7 +72,7 @@ mkdir -p duplicatesRemoved
 
 
 #=============================================================================================
-### pairing the R1 and R2 for each NHS sample. R1 has been split. Here we query the pool of R2, matching them to R1 samples (split based on the barcode).
+### pairing the R1 and R2 for each NHS sample. R1 has been split. Here we query the pool of R2, matching each R2 to its corresponding R1.
 
 List_file1="
 NHS_CTD_BR1
@@ -55,11 +88,11 @@ for x in ${List_file1}
 do
 
    fastq_pair -p -t 50000000 ${x}_R1.fastq NHS_R2.fastq
-   #pairing the reads after trimming. -t reflects the siz of the library, we had rougly 50 M read pairs
+   # pairing the reads after sample split. -t reflects the siz of the library, we had up to 50 M read pairs
 
-  mv NHS_R2.fastq.paired.fq ${x}_R2_pa.fastq   ### renaming the file, the next round would write over this.
-  mv ${x}.fastq.paired.fq ${x}_R1_pa.fastq     ### renaming the file for simplicity, matches the name for R2.
-  rm *single*
+  mv NHS_R2.fastq.paired.fq ${x}_R2_pa.fastq   ### renames the file, the next round would write over this.
+  mv ${x}.fastq.paired.fq ${x}_R1_pa.fastq     ### renames the file for simplicity, matches the name for R2.
+  rm *single*  #removes unpaired samples (you can also code the next query round to search from this file).
 
 done
 
@@ -68,7 +101,14 @@ done
 
 #=============================================================================================
 ### pairing the R1 and R2 for each HS30 sample
-  gunzip ${pathUnsplitted}i4_HS30_R2.fastq.gz
+
+  gunzip HS30_R1.fastq.gz ### Pool of samples, Read 1
+  gunzip HS30_R2.fastq.gz ### Pool of samples, Read 2
+  
+  cat NHS_R1.fastq | ${barcode_splitter} --bcfile ${barcodes_HS30} --bol --mismatches 2 --partial 2 --suffix "_BR1_R1.fastq"
+
+  gzip HS30_R1.fastq
+
 
 List_file2="
 HS30_CTD_BR1
@@ -78,6 +118,8 @@ HS30_S7_BR1
 HS30_IgG_BR1
 HS30_input_BR1
 "
+
+
 
 for x in ${List_file2}
 
